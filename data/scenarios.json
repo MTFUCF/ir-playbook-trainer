@@ -1,0 +1,1907 @@
+{
+  "scenarios": [
+    {
+      "id": "phishing-credential-compromise",
+      "title": "Phishing and Credential Compromise",
+      "summary": "A finance coordinator clicked a fake SharePoint link, approved an unexpected MFA prompt, and now reports strange inbox behavior.",
+      "references": [
+        {
+          "id": "nist-61r3",
+          "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations and Considerations for Cybersecurity Risk Management",
+          "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+          "note": "High-level incident response guidance spanning preparation, detection and analysis, containment, eradication, recovery, and post-incident improvement."
+        },
+        {
+          "id": "sentinel-investigate",
+          "title": "Microsoft Sentinel: Investigate incidents",
+          "url": "https://learn.microsoft.com/en-us/azure/sentinel/investigate-incidents",
+          "note": "Incident details, entities, tasks, comments, and in-portal Log Analytics queries for structured investigation."
+        },
+        {
+          "id": "defender-respond",
+          "title": "Microsoft Defender for Endpoint: Respond to detected attacks on devices",
+          "url": "https://learn.microsoft.com/en-us/defender-endpoint/respond-machine-alerts",
+          "note": "Manual response actions such as isolate device, live response, collect investigation package, and action center review."
+        },
+        {
+          "id": "defender-isolate",
+          "title": "Microsoft Defender for Endpoint API: Isolate machine",
+          "url": "https://learn.microsoft.com/en-us/defender-endpoint/api/isolate-machine",
+          "note": "Documents device isolation behavior and cautions around connectivity while keeping the host available for investigation."
+        }
+      ],
+      "nodes": {
+        "phish-1": {
+          "id": "phish-1",
+          "type": "decision",
+          "title": "1. Triage the user report",
+          "phase": "Detection & Analysis",
+          "objective": "Open a real incident record and preserve just enough evidence to understand what happened before the trail gets colder.",
+          "phaseGuidance": "Detection & Analysis is about validating the report, capturing facts, and resisting the urge to jump straight to cleanup without a timeline.",
+          "situation": "A finance coordinator says they opened a file-sharing email that looked like SharePoint, approved one MFA prompt because they thought it was a Teams reconnect, and now sees unread mail marked as read. Defender shows the workstation healthy for the moment, but Entra sign-in logs show one successful login from an unfamiliar IP 20 minutes ago.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "phish-1-a",
+              "label": "Create an incident, capture the original message details, and preserve the user timeline before taking action.",
+              "preview": "You keep the evidence chain intact and can still move quickly afterward.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good triage supports the Detection & Analysis phase from NIST SP 800-61r3. Creating the incident up front also fits the Microsoft Sentinel workflow where comments, tasks, and entities stay attached to one investigation record.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-2"
+            },
+            {
+              "id": "phish-1-b",
+              "label": "Tell the user to delete the email and carry on because Defender has no malware alert yet.",
+              "preview": "This treats a credential event like a harmless spam report.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Absence of malware telemetry does not rule out account compromise. You skip Detection & Analysis and lose artifacts that matter for scoping.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-1"
+            },
+            {
+              "id": "phish-1-c",
+              "label": "Reset the password immediately, then collect details later if anyone asks.",
+              "preview": "Containment happens fast, but the investigation record starts with gaps.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Fast containment can help, but doing it before capturing the message, time window, and impacted systems weakens later analysis. NIST guidance expects containment decisions to be informed by current evidence, not guesswork.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-2"
+            }
+          ]
+        },
+        "phish-2": {
+          "id": "phish-2",
+          "type": "decision",
+          "title": "2. Scope the compromise",
+          "phase": "Detection & Analysis",
+          "objective": "Decide whether this is only one mailbox or the start of a broader credential abuse campaign.",
+          "phaseGuidance": "Good analysis correlates identities, devices, alerts, and mail artifacts before you assume the blast radius.",
+          "situation": "You have the user identity, the suspicious IP, the email subject line, and a rough time window. The user says the page asked for Microsoft 365 credentials and an MFA approval. You need to decide where to look first.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "phish-2-a",
+              "label": "Use Sentinel and identity telemetry to correlate sign-ins, mailbox rule changes, risky IPs, and whether similar messages hit other users.",
+              "preview": "You build a defensible blast-radius picture before moving deeper into containment.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This matches the analysis discipline in NIST incident handling and uses the Sentinel incident page the way it is intended: review entities, comments, and logs from a single case record.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-3"
+            },
+            {
+              "id": "phish-2-b",
+              "label": "Only look at the reporting user because broad searches can wait until after the password reset.",
+              "preview": "You may still recover, but campaign indicators can keep spreading while you stay narrow.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A narrow check is better than no check, but phishing campaigns often target multiple identities. Delaying broader scoping can push a one-user problem into a larger incident.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-3"
+            },
+            {
+              "id": "phish-2-c",
+              "label": "Assume the suspicious sign-in was the user on a VPN and skip investigation to reduce ticket volume.",
+              "preview": "You close the case before validating the key facts.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Detection & Analysis requires validation, not hope. If the account is actually compromised, the attacker keeps access while the SOC looks away.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-2"
+            }
+          ]
+        },
+        "phish-3": {
+          "id": "phish-3",
+          "type": "decision",
+          "title": "3. Contain the identity risk",
+          "phase": "Containment",
+          "objective": "Stop active use of the compromised account without erasing the trail you need for later review.",
+          "phaseGuidance": "Containment should reduce further harm quickly while keeping the system investigable and recoverable.",
+          "situation": "The suspicious sign-in is confirmed. The account has active sessions in Exchange Online and SharePoint, and the user still has the workstation online. No signs yet of domain-wide admin abuse, but you cannot trust the account state.",
+          "citations": [
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "phish-3-a",
+              "label": "Revoke sessions, force a password reset, and temporarily disable risky access until you validate mailbox and app-consent artifacts.",
+              "preview": "You stop the attacker from reusing the stolen session while preserving the host for further review.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This is proportionate containment: remove current access, then continue analysis. NIST frames containment as limiting impact first, not restoring convenience first.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-4"
+            },
+            {
+              "id": "phish-3-b",
+              "label": "Ask the user to change their password whenever they finish the meeting they are in.",
+              "preview": "The attacker keeps time on target while you wait on user convenience.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Known compromise requires decisive containment. Delayed action gives the actor more time to harvest mail, plant rules, or add persistence.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-3"
+            },
+            {
+              "id": "phish-3-c",
+              "label": "Disable the account immediately, but leave collaboration sessions and mailbox artifacts for later cleanup.",
+              "preview": "Containment starts, but you still need to clean application-level persistence next.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Disabling the account helps, but incident responders still need to review mailbox rules, app consent, and token persistence. Identity containment is necessary, not sufficient.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-4"
+            }
+          ]
+        },
+        "phish-4": {
+          "id": "phish-4",
+          "type": "decision",
+          "title": "4. Check for mailbox and cloud persistence",
+          "phase": "Containment",
+          "objective": "Decide whether the attacker left forwarding rules, delegated access, or suspicious app consent behind.",
+          "phaseGuidance": "Containment is stronger when you remove the mechanisms that let the incident survive after the first password reset.",
+          "situation": "Mailbox audit logs show a new inbox rule created after the suspicious login. The user also granted consent to an unfamiliar application during the fake login flow. Finance mailboxes are high value, so lingering persistence matters.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "phish-4-a",
+              "label": "Remove the malicious inbox rule, review delegated access, and revoke the suspicious app consent before restoring the account.",
+              "preview": "You cut off the common persistence paths used in cloud phishing incidents.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good containment addresses the mechanisms that let abuse continue after credentials change. Sentinel evidence and mail audit artifacts make that removal auditable.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-5"
+            },
+            {
+              "id": "phish-4-b",
+              "label": "Block the sender domain and assume the problem is solved.",
+              "preview": "You handle delivery risk but not the persistence already left behind.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Blocking the sender helps future prevention, but it does not remove mailbox rules or app grants already created by the attacker. Recovery would still be premature.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-5"
+            },
+            {
+              "id": "phish-4-c",
+              "label": "Ignore mailbox rules because the password reset should invalidate everything anyway.",
+              "preview": "You leave attacker-created automation active.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Mailbox rules and app consent can survive a simple credential reset. That is why containment must include artifact removal, not only secret rotation.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-4"
+            }
+          ]
+        },
+        "phish-5": {
+          "id": "phish-5",
+          "type": "decision",
+          "title": "5. Decide how much endpoint evidence to collect",
+          "phase": "Detection & Analysis",
+          "objective": "Determine whether the user's workstation only reached a phishing page or also ran follow-on tooling.",
+          "phaseGuidance": "When endpoint risk is uncertain, use proportionate evidence collection before wiping, because eradication choices should be informed by facts.",
+          "situation": "The user insists they only typed credentials into a web page, but browser telemetry shows a follow-on download attempt. Defender for Endpoint offers response actions from the device page, including collecting an investigation package and starting live response.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "phish-5-a",
+              "label": "Use Defender to collect an investigation package and review browser, process, and connection telemetry before deciding on reimage.",
+              "preview": "You preserve host context while keeping the response proportional.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Microsoft Defender for Endpoint explicitly supports investigation-package collection and live response for this kind of host review. That lines up with NIST's expectation that eradication decisions follow analysis, not guesswork.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-6"
+            },
+            {
+              "id": "phish-5-b",
+              "label": "Capture a screenshot from the user and skip host telemetry to save time.",
+              "preview": "You get some context, but not enough for confident eradication choices.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A screenshot may help, but it does not replace device evidence. If the phish delivered a payload or browser extension, you may miss it without host review.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-6"
+            },
+            {
+              "id": "phish-5-c",
+              "label": "Wipe the browser and reboot the device before collecting any evidence.",
+              "preview": "You erase the best clues about what really happened on the endpoint.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Premature cleanup weakens both analysis and later lessons learned. Defender response workflows exist specifically so you can preserve evidence before removing it.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-5"
+            }
+          ]
+        },
+        "phish-6": {
+          "id": "phish-6",
+          "type": "decision",
+          "title": "6. Hunt for related activity",
+          "phase": "Detection & Analysis",
+          "objective": "Figure out whether this incident is one stolen credential or one visible part of a larger campaign.",
+          "phaseGuidance": "Repeated scoping during an incident is normal; detection and analysis do not stop just because containment started.",
+          "situation": "You confirmed the user was compromised, removed mailbox persistence, and preserved host evidence. The phishing message used a realistic subject line that likely targeted more than one recipient. Leadership asks whether anyone else is affected.",
+          "citations": [
+            "sentinel-investigate",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "phish-6-a",
+              "label": "Search Sentinel for the same sender, URLs, sign-in indicators, and follow-on mailbox-rule creation across the tenant.",
+              "preview": "You turn one case into actionable detection and reduce the chance of a second surprise.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good IR practice reuses confirmed indicators immediately. Sentinel's incident investigation workflow is designed to pivot into related entities and logs without leaving the case context.",
+              "citations": [
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-7"
+            },
+            {
+              "id": "phish-6-b",
+              "label": "Limit investigation to the current user because the ticket already feels under control.",
+              "preview": "You might miss the rest of the campaign.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "This keeps work small, but it leaves detection value on the table. A single confirmed phish is often the right moment to look for similar activity across users.",
+              "citations": [
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-7"
+            },
+            {
+              "id": "phish-6-c",
+              "label": "Close the incident now because the user got a new password and can log in again.",
+              "preview": "Recovery starts before you know whether the environment is actually clean.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Recovery should follow adequate scoping and eradication. Otherwise the SOC can declare victory while the same campaign keeps operating elsewhere.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-6"
+            }
+          ]
+        },
+        "phish-7": {
+          "id": "phish-7",
+          "type": "decision",
+          "title": "7. Coordinate the response",
+          "phase": "Containment",
+          "objective": "Keep the incident manageable by assigning work and communicating only what others need to act.",
+          "phaseGuidance": "Structured communications keep analysts from duplicating effort and keep stakeholders aligned without spreading speculation.",
+          "situation": "Help desk needs instructions for the affected user, identity engineering wants to know whether to tune Conditional Access, and management wants a concise status. The incident record is now the main source of truth.",
+          "citations": [
+            "sentinel-investigate",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "phish-7-a",
+              "label": "Use incident tasks/comments to assign help desk, identity, and mail-admin follow-ups with concise facts and timestamps.",
+              "preview": "The team works from one timeline instead of scattered chat messages.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This fits the Sentinel task-and-comment workflow and supports NIST's emphasis on coordination during response. Clear tasking keeps containment moving without losing context.",
+              "citations": [
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-8"
+            },
+            {
+              "id": "phish-7-b",
+              "label": "Keep details only in your own notes and tell people to ask you if they need anything.",
+              "preview": "You become a bottleneck in the middle of the incident.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Personal notes may be tidy for one analyst, but they scale poorly. Centralized incident documentation is safer than relying on memory and side channels.",
+              "citations": [
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-8"
+            },
+            {
+              "id": "phish-7-c",
+              "label": "Send a company-wide warning that finance was breached before you finish validation.",
+              "preview": "You create noise and panic with unconfirmed details.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Communications should be accurate, scoped, and timely. Broadcasting speculation can damage trust and distract responders from validated actions.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-8"
+            }
+          ]
+        },
+        "phish-8": {
+          "id": "phish-8",
+          "type": "decision",
+          "title": "8. Plan recovery for the user",
+          "phase": "Recovery",
+          "objective": "Return the user to work only after the account and device risk are understood well enough to avoid re-compromise.",
+          "phaseGuidance": "Recovery is not just re-enabling access; it is restoring business function with confidence that containment and eradication were sufficient.",
+          "situation": "The account has a new password, sessions were revoked, mailbox artifacts were checked, and endpoint evidence suggests no malware ran. The user needs finance access back before the next payment batch closes.",
+          "citations": [
+            "nist-61r3",
+            "defender-isolate"
+          ],
+          "choices": [
+            {
+              "id": "phish-8-a",
+              "label": "Restore access after verifying MFA settings, reviewing recent sessions, and confirming no malicious device actions remain outstanding.",
+              "preview": "You balance business recovery with confidence that containment actually held.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "That sequence matches the Recovery phase: confirm risk has been reduced, then restore service. Defender guidance on device actions reinforces that responders should verify what actions were taken before normal operations resume.",
+              "citations": [
+                "nist-61r3",
+                "defender-respond",
+                "defender-isolate"
+              ],
+              "nextNodeId": "phish-9"
+            },
+            {
+              "id": "phish-8-b",
+              "label": "Re-enable everything as soon as the user can sign in, then investigate any leftover questions later.",
+              "preview": "Business resumes fast, but confidence in recovery is weak.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Fast restoration is tempting, but it collapses recovery and unfinished analysis into the same moment. If you missed persistence, you may simply hand the actor the account again.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-9"
+            },
+            {
+              "id": "phish-8-c",
+              "label": "Restore the account before revoking old sessions because the user promises to be careful.",
+              "preview": "The attacker may still be logged in while the user comes back online.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Recovery before session invalidation leaves active compromise in place. Containment steps must stay ahead of restoration steps.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-7"
+            }
+          ]
+        },
+        "phish-9": {
+          "id": "phish-9",
+          "type": "decision",
+          "title": "9. Close with lessons learned",
+          "phase": "Post-Incident",
+          "objective": "Decide whether this incident improves the environment or just disappears into a closed ticket.",
+          "phaseGuidance": "Post-incident work is where one incident becomes better detections, better awareness, and better response speed next time.",
+          "situation": "The user is back to work. You confirmed one compromised account, removed malicious rules, and found two other employees who received the same lure but did not click. Now you have to decide what happens after closure.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "phish-9-a",
+              "label": "Document the timeline, add or tune detections for similar sign-ins and mailbox rules, and feed the lure into awareness content.",
+              "preview": "The incident becomes better preparation for the next one.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Excellent finish. This is classic post-incident improvement: preserve the narrative, improve detections, and update preparation so the same phish is easier to stop next time.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "phish-success"
+            },
+            {
+              "id": "phish-9-b",
+              "label": "Close the ticket with a short note because everyone is busy and the user recovered.",
+              "preview": "You recovered, but you leave little behind for the next analyst.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "The incident is over, but the learning value is mostly lost. Minimal notes reduce future readiness and weaken metrics about what actually happened.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-mixed"
+            },
+            {
+              "id": "phish-9-c",
+              "label": "Close by blaming the user publicly so others take phishing more seriously.",
+              "preview": "You damage reporting culture instead of strengthening it.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. A blame-heavy closeout teaches people to hide mistakes. Healthy reporting culture is part of preparation and post-incident maturity.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "phish-failure-8"
+            }
+          ]
+        },
+        "phish-success": {
+          "id": "phish-success",
+          "type": "terminal",
+          "outcome": "success",
+          "title": "Phishing contained with durable improvements",
+          "summary": "You contained the identity compromise, removed persistence, validated the endpoint, and captured lessons for future detection.",
+          "debrief": "This is the strongest path because it respects sequence: validate, contain, eradicate artifacts, recover carefully, then improve. You treated the incident like a manageable process instead of a one-click fix.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate",
+            "defender-respond"
+          ]
+        },
+        "phish-mixed": {
+          "id": "phish-mixed",
+          "type": "terminal",
+          "outcome": "mixed",
+          "title": "User recovered, but the organization learned little",
+          "summary": "Operations returned, but documentation and preventive follow-up stayed shallow.",
+          "debrief": "This path shows how an incident can look operationally resolved while still being strategically under-learned. Recovery happened, yet preparation for the next event barely improved.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-1": {
+          "id": "phish-failure-1",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The compromise stays invisible",
+          "summary": "The account remains exposed because the report was dismissed before real analysis started.",
+          "debrief": "Early dismissal is one of the most expensive IR mistakes. You saved minutes and may have bought the attacker hours or days.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-2": {
+          "id": "phish-failure-2",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "You closed a real incident as a false alarm",
+          "summary": "The actor keeps access because suspicion replaced validation.",
+          "debrief": "Skipping analysis does not shrink the incident; it only removes your visibility into it.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-3": {
+          "id": "phish-failure-3",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Containment happened too late",
+          "summary": "The attacker kept active sessions while the user waited to change the password.",
+          "debrief": "Known compromise requires decisive containment. Convenience cannot outrank active adversary time on target.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-4": {
+          "id": "phish-failure-4",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Mailbox persistence survives the reset",
+          "summary": "Forwarding and consent artifacts continue leaking information after the password changes.",
+          "debrief": "Credential compromise often includes follow-on persistence. Ignoring mailbox and app artifacts turns recovery into a false finish.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-5": {
+          "id": "phish-failure-5",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Evidence vanished before the endpoint story was known",
+          "summary": "You cleaned the host before understanding whether additional tooling ran.",
+          "debrief": "Eradication without evidence can work tactically, but it weakens confidence and damages post-incident learning.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-6": {
+          "id": "phish-failure-6",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The campaign outlives your ticket",
+          "summary": "You restored one user and missed the broader phishing activity.",
+          "debrief": "Scoping stops only when you have enough confidence in the blast radius. Stopping too soon leaves the environment exposed.",
+          "citations": [
+            "sentinel-investigate",
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-7": {
+          "id": "phish-failure-7",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Recovery began before containment finished",
+          "summary": "Old sessions stayed alive while the user returned to work.",
+          "debrief": "Order matters. Recovery on top of unfinished containment often recreates the original problem immediately.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "phish-failure-8": {
+          "id": "phish-failure-8",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The closeout damaged reporting culture",
+          "summary": "The technical issue ended, but the human response made future reporting less likely.",
+          "debrief": "Good programs want fast reporting, not silence. Post-incident behavior changes whether users surface the next problem quickly.",
+          "citations": [
+            "nist-61r3"
+          ]
+        }
+      },
+      "start_node": "phish-1"
+    },
+    {
+      "id": "ransomware-workstation",
+      "title": "Ransomware on a Workstation",
+      "summary": "Defender flags rapid file encryption on a sales laptop that still has access to network shares and cloud storage sync.",
+      "references": [
+        {
+          "id": "nist-61r3",
+          "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations and Considerations for Cybersecurity Risk Management",
+          "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+          "note": "Use it to sequence investigation, containment, eradication, recovery, and post-incident improvement in a disciplined way."
+        },
+        {
+          "id": "sentinel-investigate",
+          "title": "Microsoft Sentinel: Investigate incidents",
+          "url": "https://learn.microsoft.com/en-us/azure/sentinel/investigate-incidents",
+          "note": "Useful for pivoting from one ransomware alert into related entities, tasks, comments, and log queries."
+        },
+        {
+          "id": "defender-respond",
+          "title": "Microsoft Defender for Endpoint: Respond to detected attacks on devices",
+          "url": "https://learn.microsoft.com/en-us/defender-endpoint/respond-machine-alerts",
+          "note": "Covers device isolation, investigation package collection, live response, antivirus scans, and action center review."
+        },
+        {
+          "id": "defender-isolate",
+          "title": "Microsoft Defender for Endpoint API: Isolate machine",
+          "url": "https://learn.microsoft.com/en-us/defender-endpoint/api/isolate-machine",
+          "note": "Explains what isolation does and why responders should understand connectivity impact while keeping the host available."
+        }
+      ],
+      "nodes": {
+        "ransom-1": {
+          "id": "ransom-1",
+          "type": "decision",
+          "title": "1. Validate the encryption alert",
+          "phase": "Detection & Analysis",
+          "objective": "Confirm whether the alert reflects active ransomware and not a benign bulk-file event.",
+          "phaseGuidance": "You still need enough validation to act intelligently, but ransomware usually punishes delay more than nuisance alerts do.",
+          "situation": "A sales employee reports that documents are becoming unreadable and new files named README-RECOVER.txt are appearing. Defender for Endpoint raised a high-severity alert for suspicious encryption behavior on the same laptop five minutes ago.",
+          "citations": [
+            "nist-61r3",
+            "defender-respond"
+          ],
+          "choices": [
+            {
+              "id": "ransom-1-a",
+              "label": "Open an incident immediately, confirm the host/user/share context, and treat the encryption as active until disproven.",
+              "preview": "You preserve urgency without skipping validation.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This is the right balance for ransomware triage: validate quickly, but assume the impact window is short. NIST supports evidence-based analysis, and Defender telemetry gives you a fast starting point.",
+              "citations": [
+                "nist-61r3",
+                "defender-respond"
+              ],
+              "nextNodeId": "ransom-2"
+            },
+            {
+              "id": "ransom-1-b",
+              "label": "Wait for a second user report so you know the alert was not a false positive.",
+              "preview": "You trade certainty for more encrypted files.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. In fast-moving encryption events, waiting for more proof can become part of the damage. Initial validation is already strong enough to act.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-1"
+            },
+            {
+              "id": "ransom-1-c",
+              "label": "Tell the user to reboot and call back if the note still appears.",
+              "preview": "You may destroy volatile clues while the ransomware restarts.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Rebooting before containment or evidence capture risks losing process context and can trigger additional malicious behavior on startup.",
+              "citations": [
+                "nist-61r3",
+                "defender-respond"
+              ],
+              "nextNodeId": "ransom-failure-2"
+            }
+          ]
+        },
+        "ransom-2": {
+          "id": "ransom-2",
+          "type": "decision",
+          "title": "2. Choose initial containment",
+          "phase": "Containment",
+          "objective": "Stop spread from the infected workstation while keeping the host available for investigation and recovery planning.",
+          "phaseGuidance": "Containment should reduce business damage quickly, especially when network shares or sync clients could amplify the event.",
+          "situation": "The laptop still has line-of-business share access and OneDrive sync is active. You can reach the device record in Defender and have privileges to trigger a response action.",
+          "citations": [
+            "defender-respond",
+            "defender-isolate",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-2-a",
+              "label": "Isolate the device from the network using Defender and tell the user to stop interacting with it.",
+              "preview": "You reduce spread while preserving the host for evidence collection.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Defender supports device isolation specifically for rapid response. That lines up with NIST containment goals by limiting further harm without defaulting to destructive actions.",
+              "citations": [
+                "defender-respond",
+                "defender-isolate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-3"
+            },
+            {
+              "id": "ransom-2-b",
+              "label": "Ask the user to unplug the Ethernet cable if they can, then keep working from the laptop offline.",
+              "preview": "This may slow spread, but user activity on a live ransomware host remains risky.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Physical disconnect can help, but it is less controlled than a platform response action and still leaves user interaction on a compromised host.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-3"
+            },
+            {
+              "id": "ransom-2-c",
+              "label": "Leave the laptop connected so you can remotely browse files and verify the damage from the user session.",
+              "preview": "The encryption process keeps its path to the rest of the environment.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Containment loses value if the host keeps access to shares, SaaS sync, or peer systems during active encryption.",
+              "citations": [
+                "nist-61r3",
+                "defender-isolate"
+              ],
+              "nextNodeId": "ransom-failure-3"
+            }
+          ]
+        },
+        "ransom-3": {
+          "id": "ransom-3",
+          "type": "decision",
+          "title": "3. Scope the blast radius",
+          "phase": "Detection & Analysis",
+          "objective": "Determine whether the event is isolated to one laptop or already affecting credentials, shares, or additional devices.",
+          "phaseGuidance": "Ransomware response is stronger when you look outward quickly, not just inward at the first visible host.",
+          "situation": "The workstation is isolated. Initial logs show access to two network shares and several recent authentication events. Leadership wants to know whether this is one infected laptop or the start of an outage.",
+          "citations": [
+            "sentinel-investigate",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-3-a",
+              "label": "Use Sentinel and endpoint telemetry to check related alerts, share access, recent authentications, and whether the same indicators appear on other hosts.",
+              "preview": "You turn one infected endpoint into environment awareness.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This uses the incident-centric pivoting that Sentinel is good at and follows NIST's expectation that analysis should define scope before recovery decisions are made.",
+              "citations": [
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-4"
+            },
+            {
+              "id": "ransom-3-b",
+              "label": "Assume isolation solved the problem and postpone wider scoping until after the laptop is rebuilt.",
+              "preview": "You may miss lateral spread or secondary persistence.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Host isolation protects one system, but it does not answer whether the actor already touched other systems or credentials.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "ransom-failure-4"
+            },
+            {
+              "id": "ransom-3-c",
+              "label": "Check only the user's home drive and skip authentication review because file encryption is your main concern.",
+              "preview": "You get local context but miss identity and spread questions.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A local-only check helps explain immediate impact, but it leaves major scope questions unanswered. Ransomware response often depends on more than the visible encrypted files.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-4"
+            }
+          ]
+        },
+        "ransom-4": {
+          "id": "ransom-4",
+          "type": "decision",
+          "title": "4. Preserve evidence before cleanup",
+          "phase": "Detection & Analysis",
+          "objective": "Collect what you need to understand the process tree, note, binaries, and reach-back behavior before eradication changes the host.",
+          "phaseGuidance": "Even urgent incidents need evidence preservation, because rushed cleanup can hide the root cause and complicate future containment.",
+          "situation": "The ransom note is present. Defender shows suspicious process ancestry, but you have not yet collected the device package or saved the note, extension list, and process details for review.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-4-a",
+              "label": "Collect an investigation package, preserve the ransom note and indicators, and export the timeline before making eradication changes.",
+              "preview": "You retain the information needed for root-cause and later tuning.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Defender response actions exist for this exact step, and NIST emphasizes preserving artifacts so eradication and post-incident work are based on evidence.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-5"
+            },
+            {
+              "id": "ransom-4-b",
+              "label": "Rely on memory and screenshots so the rebuild can start immediately.",
+              "preview": "You may rebuild quickly, but you lose high-value forensic context.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A screenshot is better than nothing, but it usually omits process ancestry, dropped binaries, and network context that matter for eradication confidence.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-5"
+            },
+            {
+              "id": "ransom-4-c",
+              "label": "Delete the note and quarantine files first so no one accidentally sees them.",
+              "preview": "The evidence trail gets thinner before you understand the incident.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Cleanup before preservation creates gaps in the timeline and can undermine future detection engineering.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-5"
+            }
+          ]
+        },
+        "ransom-5": {
+          "id": "ransom-5",
+          "type": "decision",
+          "title": "5. Contain related credentials and infrastructure",
+          "phase": "Containment",
+          "objective": "Reduce the chance that the same actor or tooling reuses access beyond the laptop itself.",
+          "phaseGuidance": "Containment usually extends past the infected asset to the credentials, shares, and services that gave the incident room to spread.",
+          "situation": "Logs show the user authenticated to a finance share shortly before encryption started. A saved admin credential is also present on the host. You need to decide how broadly to contain access.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "ransom-5-a",
+              "label": "Reset exposed credentials, review privileged access, and temporarily restrict the affected share paths while scoping continues.",
+              "preview": "You reduce the chance of reinfection or lateral use of the same access.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Strong containment looks beyond the first host. Credential and share control reduce the attacker's options while you continue analysis.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "ransom-6"
+            },
+            {
+              "id": "ransom-5-b",
+              "label": "Leave credentials alone until the rebuild is finished so you do not inconvenience the user twice.",
+              "preview": "The host may be isolated, but the identity risk remains.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "This avoids immediate user disruption, but it preserves a possible path for reinfection or spread if the actor reused the credentials elsewhere.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-6"
+            },
+            {
+              "id": "ransom-5-c",
+              "label": "Reconnect the host briefly so the user can copy a few important files off before you lock anything down.",
+              "preview": "You reintroduce the host to the environment during an active ransomware response.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Reconnecting a compromised host during containment can spread the incident and contaminate clean systems or shares.",
+              "citations": [
+                "defender-isolate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-6"
+            }
+          ]
+        },
+        "ransom-6": {
+          "id": "ransom-6",
+          "type": "decision",
+          "title": "6. Choose eradication strategy",
+          "phase": "Eradication",
+          "objective": "Remove malware and persistence in a way that is credible for a business laptop that showed ransomware behavior.",
+          "phaseGuidance": "Eradication needs enough confidence to prevent the same malicious foothold from surviving into recovery.",
+          "situation": "Evidence suggests a commodity ransomware loader was launched by a user-space executable after a malicious email attachment. Defender can quarantine files and run scans, but the host has clearly been actively encrypted.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-6-a",
+              "label": "Block known indicators and plan a clean rebuild or reimage rather than trusting the compromised workstation for production use.",
+              "preview": "You treat the host as untrusted after confirmed ransomware activity.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "For an actively encrypted workstation, a clean rebuild is usually more defensible than trying to trust the original image. Eradication should remove both malware and uncertainty.",
+              "citations": [
+                "nist-61r3",
+                "defender-respond"
+              ],
+              "nextNodeId": "ransom-7"
+            },
+            {
+              "id": "ransom-6-b",
+              "label": "Run an antivirus scan and, if it comes back clean, return the same workstation to the user.",
+              "preview": "You may remove the visible payload but keep lingering uncertainty.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A scan can be part of the process, but treating it as the whole eradication plan is optimistic after confirmed ransomware execution.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-7"
+            },
+            {
+              "id": "ransom-6-c",
+              "label": "Pay the ransom immediately so you can skip eradication and move straight to recovery.",
+              "preview": "You surrender leverage without proving anything is actually remediated.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Payment does not equal eradication, recovery, or trustworthy systems. You still need containment, validation, and a sound restore plan.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-7"
+            }
+          ]
+        },
+        "ransom-7": {
+          "id": "ransom-7",
+          "type": "decision",
+          "title": "7. Select the recovery source",
+          "phase": "Recovery",
+          "objective": "Return the user to service from something you trust, not from the same compromised state.",
+          "phaseGuidance": "Recovery should prefer known-good images and backups that were validated before they become production again.",
+          "situation": "The user needs the laptop for quarter-end reporting. You have device rebuild capacity, recent backups for local data, and cloud copies for some shared documents. The user asks whether you can just decrypt whatever still opens.",
+          "citations": [
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-7-a",
+              "label": "Restore from known-good backups or a gold image, then recover only validated business data.",
+              "preview": "You prioritize trusted state over convenience.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "That is a sound Recovery decision: rebuild from trusted sources, then return only validated data. It keeps the recovery boundary clean.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-8"
+            },
+            {
+              "id": "ransom-7-b",
+              "label": "Reuse whatever files still look normal on the compromised disk to save restore time.",
+              "preview": "You save time, but trust in the recovered state becomes fuzzy.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "This can speed business return, but it weakens the clean-line recovery model. Recovery is safest when sources are known-good, not merely still readable.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-8"
+            },
+            {
+              "id": "ransom-7-c",
+              "label": "Let the user continue on the isolated but infected host because the network block should be enough protection.",
+              "preview": "You treat containment as if it were recovery.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Isolation is a containment control, not a production operating mode for a ransomware-infected asset.",
+              "citations": [
+                "defender-isolate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-8"
+            }
+          ]
+        },
+        "ransom-8": {
+          "id": "ransom-8",
+          "type": "decision",
+          "title": "8. Validate before reconnecting",
+          "phase": "Recovery",
+          "objective": "Prove the rebuilt or restored device is healthy before it re-enters the environment.",
+          "phaseGuidance": "Recovery should include monitoring and validation, not just the moment a user regains access.",
+          "situation": "The replacement or rebuilt laptop is staged. The user is pressing for immediate reconnect to mapped drives. You have a chance to verify patch level, EDR health, and whether the old indicators still appear.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "ransom-8-a",
+              "label": "Confirm patches, EDR registration, restored data integrity, and no matching indicators before reconnecting shares and sync.",
+              "preview": "You make recovery a controlled return, not a leap of faith.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Recovery validation reduces the chance of immediate recurrence. It also creates a documented checkpoint before business services are restored.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-9"
+            },
+            {
+              "id": "ransom-8-b",
+              "label": "Reconnect first and monitor after the user starts working, because if anything breaks you will hear quickly.",
+              "preview": "Monitoring matters, but you skip the clean checkpoint before exposure returns.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Post-reconnect monitoring is good, but it should complement pre-reconnect validation, not replace it.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-9"
+            },
+            {
+              "id": "ransom-8-c",
+              "label": "Reconnect the original infected workstation because the user verified the ransom note is gone now.",
+              "preview": "You trust a compromised state based on one visible symptom disappearing.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Removing the most obvious symptom does not prove eradication or recovery readiness.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-9"
+            }
+          ]
+        },
+        "ransom-9": {
+          "id": "ransom-9",
+          "type": "decision",
+          "title": "9. Drive post-incident follow-up",
+          "phase": "Post-Incident",
+          "objective": "Turn one ransomware case into stronger controls, detections, and readiness.",
+          "phaseGuidance": "A good technical recovery is not the finish line if the organization never closes the gaps that made the event possible.",
+          "situation": "The user is back online. Share impact was limited and no other devices were hit. You now know the likely delivery method, the weak credential/storage decisions on the host, and the time it took to contain the incident.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "ransom-9-a",
+              "label": "Document the full timeline, tune detections, review backup coverage, and address the initial access gap that enabled the ransomware.",
+              "preview": "You convert an outage scare into better preparation.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Strong post-incident work closes the loop from detection through recovery and preparation. That is how one event improves future resilience.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "ransom-success"
+            },
+            {
+              "id": "ransom-9-b",
+              "label": "Mark the incident resolved and move on because the workstation was rebuilt successfully.",
+              "preview": "You fixed the symptom but not the program.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "The immediate response worked, but your preparation for the next event barely changes. Valuable lessons remain trapped in analyst memory.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-mixed"
+            },
+            {
+              "id": "ransom-9-c",
+              "label": "Avoid documenting details so the event never appears in response metrics.",
+              "preview": "You hide the incident instead of improving from it.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Post-incident data is part of preparedness. Concealing incidents makes future planning and resource decisions worse.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "ransom-failure-10"
+            }
+          ]
+        },
+        "ransom-success": {
+          "id": "ransom-success",
+          "type": "terminal",
+          "outcome": "success",
+          "title": "Ransomware contained and recovered cleanly",
+          "summary": "You isolated the host, preserved evidence, scoped the environment, rebuilt from trusted sources, and captured improvements.",
+          "debrief": "This path shows disciplined ransomware handling: contain fast, scope broadly, trust evidence, and recover only from clean state.",
+          "citations": [
+            "nist-61r3",
+            "defender-respond",
+            "sentinel-investigate"
+          ]
+        },
+        "ransom-mixed": {
+          "id": "ransom-mixed",
+          "type": "terminal",
+          "outcome": "mixed",
+          "title": "Business recovered, but readiness barely improved",
+          "summary": "The user is back online, yet the organization learned less than it could have.",
+          "debrief": "This path is operationally acceptable but strategically weak. Rebuild alone is not a mature post-incident response.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-1": {
+          "id": "ransom-failure-1",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Delay expanded the damage window",
+          "summary": "Waiting for more proof gave the encryption process more time.",
+          "debrief": "When telemetry and user impact already agree, delay becomes part of the incident impact.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-2": {
+          "id": "ransom-failure-2",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The reboot erased useful context",
+          "summary": "You lost evidence and may have restarted malicious persistence.",
+          "debrief": "Fast action is important, but uncontrolled action can still hurt the response.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-3": {
+          "id": "ransom-failure-3",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Containment never really began",
+          "summary": "The infected workstation stayed connected long enough to threaten more assets.",
+          "debrief": "Containment loses meaning if the compromised host keeps a path to business systems.",
+          "citations": [
+            "defender-isolate",
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-4": {
+          "id": "ransom-failure-4",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "You rebuilt one host and missed the rest of the scope",
+          "summary": "The incident response narrowed too early.",
+          "debrief": "A host can be isolated and still not be the full story. Scope defines whether recovery is safe.",
+          "citations": [
+            "sentinel-investigate",
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-5": {
+          "id": "ransom-failure-5",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Key evidence was deleted before preservation",
+          "summary": "The note and timeline clues are gone.",
+          "debrief": "That weakens eradication confidence and makes later tuning harder than it needed to be.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-6": {
+          "id": "ransom-failure-6",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Reconnecting the host reintroduced risk",
+          "summary": "Containment was undone for user convenience.",
+          "debrief": "Once a ransomware host is isolated, the burden of proof for reconnecting it is high.",
+          "citations": [
+            "defender-isolate",
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-7": {
+          "id": "ransom-failure-7",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Payment replaced planning",
+          "summary": "You skipped eradication discipline and still lacked a trustworthy recovery path.",
+          "debrief": "No shortcut removes the need to understand scope, trust state, and restore from something defensible.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-8": {
+          "id": "ransom-failure-8",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Containment was mistaken for recovery",
+          "summary": "The user stayed on a compromised system instead of a trusted one.",
+          "debrief": "Isolation protects the environment temporarily; it does not make the infected asset safe for production use.",
+          "citations": [
+            "defender-isolate",
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-9": {
+          "id": "ransom-failure-9",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The old host was trusted too soon",
+          "summary": "The disappearance of the ransom note was treated as proof of health.",
+          "debrief": "Visible symptoms can change while root cause and persistence remain unresolved.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "ransom-failure-10": {
+          "id": "ransom-failure-10",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The incident vanished from the lessons-learned cycle",
+          "summary": "No one can improve controls from an incident that was never properly documented.",
+          "debrief": "Post-incident work is where response becomes preparation. Hiding the event breaks that loop.",
+          "citations": [
+            "nist-61r3"
+          ]
+        }
+      },
+      "start_node": "ransom-1"
+    },
+    {
+      "id": "insider-data-exfiltration",
+      "title": "Insider Data Exfiltration",
+      "summary": "A departing analyst appears to be uploading sensitive files to a personal cloud account while copying documents to removable media.",
+      "references": [
+        {
+          "id": "nist-61r3",
+          "title": "NIST SP 800-61 Rev. 3: Incident Response Recommendations and Considerations for Cybersecurity Risk Management",
+          "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+          "note": "Provides the overall incident handling structure used here for preparation, analysis, containment, recovery, and post-incident review."
+        },
+        {
+          "id": "sentinel-investigate",
+          "title": "Microsoft Sentinel: Investigate incidents",
+          "url": "https://learn.microsoft.com/en-us/azure/sentinel/investigate-incidents",
+          "note": "Supports case-centric investigation with tasks, comments, entities, and ad hoc log pivots."
+        },
+        {
+          "id": "defender-respond",
+          "title": "Microsoft Defender for Endpoint: Respond to detected attacks on devices",
+          "url": "https://learn.microsoft.com/en-us/defender-endpoint/respond-machine-alerts",
+          "note": "Useful for endpoint collection, live response, and device containment when exfiltration activity involves a workstation."
+        },
+        {
+          "id": "purview-dlp",
+          "title": "Microsoft Purview DLP alerts: Get started",
+          "url": "https://learn.microsoft.com/en-us/purview/dlp-alerts-get-started",
+          "note": "Explains that DLP alerts can be investigated in Microsoft Defender XDR and the Purview portal, with Defender XDR recommended for investigation and management."
+        }
+      ],
+      "nodes": {
+        "insider-1": {
+          "id": "insider-1",
+          "type": "decision",
+          "title": "1. Triage the exfiltration alert",
+          "phase": "Detection & Analysis",
+          "objective": "Validate whether the activity may reflect intentional policy violation, a misunderstanding, or a legitimate business workflow.",
+          "phaseGuidance": "Insider cases need disciplined fact gathering because premature confrontation can destroy evidence or create unnecessary harm.",
+          "situation": "A DLP alert in Defender XDR shows a departing analyst uploaded multiple engineering documents to a personal cloud service and connected a USB drive within the same hour. Their resignation becomes effective tomorrow. The manager has not been contacted yet.",
+          "citations": [
+            "purview-dlp",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "insider-1-a",
+              "label": "Open an incident, preserve the alert details, and quietly validate file scope and timing before contacting the employee.",
+              "preview": "You keep the investigation evidence-first and discreet.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good start. DLP alerts are meant to be investigated in Defender XDR or Purview, and NIST analysis discipline favors quiet validation before taking steps that could alter behavior or evidence.",
+              "citations": [
+                "purview-dlp",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-2"
+            },
+            {
+              "id": "insider-1-b",
+              "label": "Call the employee immediately and ask whether they stole data.",
+              "preview": "You tip off the subject before preserving much context.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Direct confrontation before evidence preservation can change behavior, trigger deletion, and complicate later coordination with HR or legal teams.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-1"
+            },
+            {
+              "id": "insider-1-c",
+              "label": "Assume the behavior is harmless because departing employees often move personal files around.",
+              "preview": "You under-react to a credible DLP signal.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. DLP alerts exist to surface exactly these higher-risk patterns. You do not need to assume malice, but you do need to investigate.",
+              "citations": [
+                "purview-dlp",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-2"
+            }
+          ]
+        },
+        "insider-2": {
+          "id": "insider-2",
+          "type": "decision",
+          "title": "2. Decide on immediate access controls",
+          "phase": "Containment",
+          "objective": "Reduce additional data movement risk while preserving enough visibility to continue the investigation.",
+          "phaseGuidance": "Containment in insider cases should be proportionate, quiet when possible, and aligned to internal policy rather than improvised punishment.",
+          "situation": "The alert involves source-code design docs and project financials. The user still has access to shared drives, SaaS repositories, and their workstation. You need to decide whether to restrict access now or wait.",
+          "citations": [
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "insider-2-a",
+              "label": "Coordinate a discreet, policy-based reduction of access to the most sensitive repositories while keeping the incident quiet and documented.",
+              "preview": "You slow further exfiltration without turning the response into a public confrontation.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This is proportionate containment. NIST encourages limiting further harm, and insider cases often benefit from controlled access reduction rather than dramatic action that tips off the subject.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-3"
+            },
+            {
+              "id": "insider-2-b",
+              "label": "Wait until the end of the day because restricting access might look suspicious.",
+              "preview": "The user keeps the same opportunity window that triggered the alert.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Quiet containment matters, but waiting without any compensating control can give the user more time to move data. Delay should be justified by evidence, not discomfort.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-3"
+            },
+            {
+              "id": "insider-2-c",
+              "label": "Disable every account and revoke every session instantly without capturing scope or telling anyone why.",
+              "preview": "You stop activity, but you also create confusion and may lose investigation context.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Extreme containment can be warranted in some organizations, but doing it with no documentation or coordination makes follow-on analysis and business handling harder.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-3"
+            }
+          ]
+        },
+        "insider-3": {
+          "id": "insider-3",
+          "type": "decision",
+          "title": "3. Scope what data moved",
+          "phase": "Detection & Analysis",
+          "objective": "Identify what files, systems, and services are involved before making claims about impact.",
+          "phaseGuidance": "Impact statements are only as good as the scope work behind them.",
+          "situation": "Current evidence suggests both cloud upload activity and USB access. Data owners will ask what was touched, when it happened, and whether the documents were already public or truly sensitive.",
+          "citations": [
+            "sentinel-investigate",
+            "purview-dlp",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "insider-3-a",
+              "label": "Correlate DLP alerts, endpoint file activity, repository access, and cloud-session logs to build a defensible scope statement.",
+              "preview": "You avoid guessing at impact and can brief stakeholders with specifics.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This is solid analysis work. Purview and Defender XDR give DLP context, while Sentinel can help correlate entities and timestamps across the wider incident record.",
+              "citations": [
+                "purview-dlp",
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-4"
+            },
+            {
+              "id": "insider-3-b",
+              "label": "Look only at the USB event because that is the easiest piece of evidence to explain.",
+              "preview": "You may miss the larger cloud-exfiltration story.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A USB-centric review is easier, but it risks undercounting cloud uploads or repository exports that matter even more.",
+              "citations": [
+                "purview-dlp",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-4"
+            },
+            {
+              "id": "insider-3-c",
+              "label": "Tell leadership the data was definitely stolen before the scope work is complete.",
+              "preview": "You jump from suspicion to certainty without enough support.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. NIST analysis discipline separates observed facts from conclusions. Premature certainty can create downstream legal, privacy, and HR complications.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-3"
+            }
+          ]
+        },
+        "insider-4": {
+          "id": "insider-4",
+          "type": "decision",
+          "title": "4. Preserve endpoint and cloud evidence",
+          "phase": "Detection & Analysis",
+          "objective": "Capture the workstation and service-side context before the user changes behavior or the device state changes.",
+          "phaseGuidance": "Preservation is especially important in insider cases, where intent and sequence matter as much as raw telemetry.",
+          "situation": "The employee workstation is still online. Defender for Endpoint gives you live response and investigation-package options. Cloud audit logs are available, but you have not yet captured the endpoint timeline.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "insider-4-a",
+              "label": "Collect the endpoint investigation package and relevant cloud audit data before making user-visible changes.",
+              "preview": "You keep the evidence trail stronger for later review.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good practice. Defender response actions help collect host evidence quickly, and NIST expects preservation before eradication or other disruptive moves alter the state you are investigating.",
+              "citations": [
+                "defender-respond",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-5"
+            },
+            {
+              "id": "insider-4-b",
+              "label": "Ask the employee to explain what they copied and rely on their answer as your main record.",
+              "preview": "You get a narrative, but not a reliable evidence base.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Interviews can matter later, but they should not replace technical evidence. You need logs and host artifacts first.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-5"
+            },
+            {
+              "id": "insider-4-c",
+              "label": "Remote into the workstation and start deleting browser history and sync folders to stop embarrassment.",
+              "preview": "You damage the evidence trail while still not knowing the true scope.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Destructive action before preservation undermines the incident record and can make later fact-finding far harder.",
+              "citations": [
+                "nist-61r3",
+                "defender-respond"
+              ],
+              "nextNodeId": "insider-failure-4"
+            }
+          ]
+        },
+        "insider-5": {
+          "id": "insider-5",
+          "type": "decision",
+          "title": "5. Coordinate with stakeholders on a need-to-know basis",
+          "phase": "Containment",
+          "objective": "Align HR, management, privacy, legal, or data owners according to internal policy without oversharing.",
+          "phaseGuidance": "Insider cases depend heavily on disciplined coordination. The exact participants vary by organization, but the process should stay documented and intentional.",
+          "situation": "You now have enough evidence to say the activity is suspicious, but not enough to claim motive or external disclosure with certainty. Several groups may need to know, depending on company policy.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "insider-5-a",
+              "label": "Brief the minimum required stakeholders per policy, capture decisions in the incident record, and keep distribution tight.",
+              "preview": "You coordinate without turning the case into gossip.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Good coordination is both disciplined and need-to-know. Sentinel's incident comments and tasks help keep decisions attached to the case instead of spreading across ad hoc channels.",
+              "citations": [
+                "sentinel-investigate",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-6"
+            },
+            {
+              "id": "insider-5-b",
+              "label": "Send the alert and file names to a wide operations mailing list so everyone stays informed.",
+              "preview": "You may spread sensitive case details beyond those who need them.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Broad distribution can create privacy, HR, and trust issues while adding little operational value. Coordination should be scoped and documented.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-5"
+            },
+            {
+              "id": "insider-5-c",
+              "label": "Handle the whole case alone until you are completely certain what happened.",
+              "preview": "You avoid noise, but you also delay the people who may need to act.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Silence can prevent oversharing, but it can also create avoidable delay. Mature response balances discretion with timely involvement of the right stakeholders.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-6"
+            }
+          ]
+        },
+        "insider-6": {
+          "id": "insider-6",
+          "type": "decision",
+          "title": "6. Contain the exfiltration channels",
+          "phase": "Containment",
+          "objective": "Stop additional uploads or copies without destroying the evidence that explains them.",
+          "phaseGuidance": "Containment in this phase should target the paths data is leaving through: endpoints, sync clients, sessions, removable media, and external sharing.",
+          "situation": "The user still has a browser session to the personal cloud service and still has the same workstation. DLP and endpoint telemetry indicate the exfiltration may still be in progress.",
+          "citations": [
+            "defender-respond",
+            "purview-dlp",
+            "nist-61r3"
+          ],
+          "choices": [
+            {
+              "id": "insider-6-a",
+              "label": "Block the suspicious external channel, revoke active sessions as appropriate, and preserve the endpoint for continued analysis.",
+              "preview": "You target the exfil path while keeping the evidence-rich device state intact.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "This is focused containment: reduce ongoing loss, preserve evidence, and keep actions tied to the confirmed path of risk.",
+              "citations": [
+                "defender-respond",
+                "purview-dlp",
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-7"
+            },
+            {
+              "id": "insider-6-b",
+              "label": "Remind the user of policy and trust them to stop copying files.",
+              "preview": "You respond with a warning while the technical path stays open.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Known suspicious activity requires containment, not just a reminder. The risk path remains available while you hope behavior changes.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-6"
+            },
+            {
+              "id": "insider-6-c",
+              "label": "Wait until the exit interview to make changes because it will be more convenient administratively.",
+              "preview": "Convenience outranks active data-loss risk.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Administrative timing can matter, but incident containment should not be postponed if evidence suggests the risky activity is ongoing.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-7"
+            }
+          ]
+        },
+        "insider-7": {
+          "id": "insider-7",
+          "type": "decision",
+          "title": "7. Assess business and data impact",
+          "phase": "Detection & Analysis",
+          "objective": "Determine what the copied data means for the business, not just how many files moved.",
+          "phaseGuidance": "Impact assessment links technical scope to data owners, sensitivity, and organizational consequences.",
+          "situation": "You now know roughly which files were copied. Some are architecture diagrams, some are financial forecasts, and some may be duplicates of already public material. Data owners need a confident impact statement.",
+          "citations": [
+            "nist-61r3",
+            "purview-dlp"
+          ],
+          "choices": [
+            {
+              "id": "insider-7-a",
+              "label": "Work with data owners to classify the files, distinguish public from sensitive material, and document downstream obligations per internal policy.",
+              "preview": "You ground impact in actual data value instead of raw file counts.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Strong analysis connects file movement to business context. Impact is not just a volume metric; it depends on what the material means to the organization.",
+              "citations": [
+                "nist-61r3",
+                "purview-dlp"
+              ],
+              "nextNodeId": "insider-8"
+            },
+            {
+              "id": "insider-7-b",
+              "label": "Assume the event is low impact because there was no malware involved.",
+              "preview": "You confuse malicious code risk with data-loss risk.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Data exfiltration can be highly significant even when no malware is present. The impact depends on the data, not the delivery mechanism.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-7"
+            },
+            {
+              "id": "insider-7-c",
+              "label": "Count the files but skip owner review because classification will slow the case down.",
+              "preview": "You get a number without the meaning behind it.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "File counts are useful, but they rarely answer the main business question: what actually matters among the files copied.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-8"
+            }
+          ]
+        },
+        "insider-8": {
+          "id": "insider-8",
+          "type": "decision",
+          "title": "8. Choose remediation and recovery actions",
+          "phase": "Recovery",
+          "objective": "Reduce residual risk from the copied data and prepare the environment for the employee departure without reopening the same issue.",
+          "phaseGuidance": "Recovery in insider cases often means restoring trust in access boundaries, shared links, credentials, and ownership workflows.",
+          "situation": "The active exfiltration appears contained. The employee still has some remaining access before separation processing finishes. Shared links, tokens, and standing permissions may still expose the copied content further.",
+          "citations": [
+            "nist-61r3",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "insider-8-a",
+              "label": "Rotate relevant credentials or tokens, revoke unneeded shares, and complete offboarding access cleanup in a documented sequence.",
+              "preview": "You recover by closing the residual paths that still matter after containment.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Recovery is about regaining a trustworthy state. In this case that means cleaning up access, shares, and tokens that could keep the problem alive after the main event stops.",
+              "citations": [
+                "nist-61r3",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "insider-9"
+            },
+            {
+              "id": "insider-8-b",
+              "label": "Leave all shared links and tokens alone because the employee departs tomorrow anyway.",
+              "preview": "Residual access can survive even if the employee soon leaves.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "A departure date is not a remediation control. Residual access paths can outlive the employment event unless someone closes them deliberately.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-9"
+            },
+            {
+              "id": "insider-8-c",
+              "label": "Restore the user's full access because they claim the copied files were just for reference at home.",
+              "preview": "You let a verbal explanation override the investigation record.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Recovery should be based on evidence and documented decisions, not convenience or unverified assurances.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-8"
+            }
+          ]
+        },
+        "insider-9": {
+          "id": "insider-9",
+          "type": "decision",
+          "title": "9. Capture post-incident improvements",
+          "phase": "Post-Incident",
+          "objective": "Strengthen controls and response workflows so similar data-loss patterns are easier to catch and handle next time.",
+          "phaseGuidance": "Post-incident review should improve prevention, monitoring, and coordination, even when the case was sensitive or uncomfortable.",
+          "situation": "The immediate case is stable. You now know which data sets were involved, where monitoring worked, and where policies or offboarding controls were too loose.",
+          "citations": [
+            "nist-61r3",
+            "purview-dlp",
+            "sentinel-investigate"
+          ],
+          "choices": [
+            {
+              "id": "insider-9-a",
+              "label": "Document the timeline, tune DLP and endpoint detections, and improve least-privilege and offboarding controls.",
+              "preview": "The investigation becomes future preparation instead of a one-time scramble.",
+              "verdict": "good",
+              "score": 1,
+              "explanation": "Excellent finish. This is what post-incident maturity looks like: improve the controls, improve the workflow, and preserve what you learned.",
+              "citations": [
+                "nist-61r3",
+                "purview-dlp",
+                "sentinel-investigate"
+              ],
+              "nextNodeId": "insider-success"
+            },
+            {
+              "id": "insider-9-b",
+              "label": "Close the case quietly with minimal notes so the organization does not have to revisit it.",
+              "preview": "The sensitive case ends, but preparation barely improves.",
+              "verdict": "neutral",
+              "score": 0,
+              "explanation": "Quiet closure may feel convenient, but it sacrifices program learning and makes similar cases harder to handle later.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-mixed"
+            },
+            {
+              "id": "insider-9-c",
+              "label": "Discard the evidence package once the employee is gone because the problem is over.",
+              "preview": "You erase the basis for later review and future tuning.",
+              "verdict": "bad",
+              "score": -1,
+              "explanation": "Bad call. Post-incident learning depends on preserving the case record long enough to review and improve from it.",
+              "citations": [
+                "nist-61r3"
+              ],
+              "nextNodeId": "insider-failure-9"
+            }
+          ]
+        },
+        "insider-success": {
+          "id": "insider-success",
+          "type": "terminal",
+          "outcome": "success",
+          "title": "Exfiltration risk contained with disciplined follow-through",
+          "summary": "You validated the alert, preserved evidence, contained the exfil path, coordinated discreetly, and improved controls for next time.",
+          "debrief": "This path stays evidence-first and policy-aware without pretending every organization handles insider cases identically. You balanced discretion, scope, and durable remediation well.",
+          "citations": [
+            "nist-61r3",
+            "purview-dlp",
+            "defender-respond",
+            "sentinel-investigate"
+          ]
+        },
+        "insider-mixed": {
+          "id": "insider-mixed",
+          "type": "terminal",
+          "outcome": "mixed",
+          "title": "The case closed, but the control gaps remain fuzzy",
+          "summary": "The immediate issue is stabilized, yet long-term prevention and documentation remain thin.",
+          "debrief": "Sensitive incidents still need structured learning. Quiet resolution alone is not the same as improved readiness.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-1": {
+          "id": "insider-failure-1",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The subject was alerted before the evidence was ready",
+          "summary": "Direct confrontation came too early and reduced your control over the investigation.",
+          "debrief": "Evidence-first handling matters especially in insider cases, where behavior can change as soon as the subject knows they were noticed.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-2": {
+          "id": "insider-failure-2",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "A credible DLP signal was ignored",
+          "summary": "Potential data loss continued because the alert was treated as routine noise.",
+          "debrief": "You do not need to assume bad intent, but you do need to investigate suspicious exfiltration indicators promptly.",
+          "citations": [
+            "purview-dlp",
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-3": {
+          "id": "insider-failure-3",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Leadership received certainty before facts",
+          "summary": "The case narrative outran the underlying evidence.",
+          "debrief": "Premature conclusions create avoidable downstream problems in sensitive incidents.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-4": {
+          "id": "insider-failure-4",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Evidence was damaged during panic cleanup",
+          "summary": "Browser and sync artifacts were changed before preservation.",
+          "debrief": "Deleting evidence does not remove the incident; it just weakens your ability to explain it later.",
+          "citations": [
+            "defender-respond",
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-5": {
+          "id": "insider-failure-5",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Sensitive case details were overshared",
+          "summary": "Operational awareness came at the cost of discipline and discretion.",
+          "debrief": "Need-to-know coordination exists for a reason. Oversharing can become its own incident-handling problem.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-6": {
+          "id": "insider-failure-6",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The exfiltration path stayed open",
+          "summary": "A policy reminder replaced actual containment.",
+          "debrief": "When the technical path remains available, hope is not a containment strategy.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-7": {
+          "id": "insider-failure-7",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Impact was minimized for the wrong reason",
+          "summary": "The absence of malware led you to underestimate possible data loss.",
+          "debrief": "Insider and exfiltration cases are about data and access, not just malicious executables.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-8": {
+          "id": "insider-failure-8",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "Recovery trusted an unverified explanation",
+          "summary": "Full access was restored even though the evidence did not support that decision.",
+          "debrief": "Recovery should close risk based on documented facts, not reopen it based on convenience.",
+          "citations": [
+            "nist-61r3"
+          ]
+        },
+        "insider-failure-9": {
+          "id": "insider-failure-9",
+          "type": "terminal",
+          "outcome": "failure",
+          "title": "The evidence package was discarded before learning happened",
+          "summary": "The organization lost the ability to review and improve from the case.",
+          "debrief": "Post-incident improvement depends on keeping the case record long enough to use it.",
+          "citations": [
+            "nist-61r3"
+          ]
+        }
+      },
+      "start_node": "insider-1"
+    }
+  ]
+}

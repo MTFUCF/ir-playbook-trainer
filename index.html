@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="IR Playbook Trainer is a static branching incident response app for practicing phishing, ransomware, and insider data exfil decisions."
+    />
+    <title>IR Playbook Trainer</title>
+    <link rel="stylesheet" href="styles/main.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#app-main">Skip to main content</a>
+    <div class="page-shell">
+      <header class="site-header">
+        <div>
+          <p class="eyebrow">Static tabletop-style incident response practice</p>
+          <h1>IR Playbook Trainer</h1>
+          <p class="site-intro">
+            Explore branching scenarios, review consequence-driven feedback, and compare your path against
+            recommended IR phases and Microsoft security workflows.
+          </p>
+        </div>
+        <div class="header-actions">
+          <button id="theme-toggle" class="toggle-button" type="button" aria-pressed="false">
+            Toggle dark mode
+          </button>
+        </div>
+      </header>
+
+      <main id="app-main" class="app-layout" tabindex="-1">
+        <section id="global-status" class="status-strip" aria-live="polite"></section>
+        <section class="workspace">
+          <aside id="scenario-picker" class="panel panel--sidebar" aria-label="Scenario picker"></aside>
+          <section id="play-area" class="panel panel--main" aria-live="polite"></section>
+          <aside id="tree-panel" class="panel panel--tree" aria-label="Decision tree"></aside>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        Built by Matthew Faber ·
+        <a href="https://github.com/matthewfaber/ir-playbook-trainer" target="_blank" rel="noreferrer">source</a>
+      </footer>
+    </div>
+
+    <noscript>
+      <div class="noscript-banner">
+        This app needs JavaScript enabled so it can load the branching scenarios and track your progress locally.
+      </div>
+    </noscript>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
