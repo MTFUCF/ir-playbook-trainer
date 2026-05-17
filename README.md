@@ -138,6 +138,6 @@ See `TESTING.md` for the manual checklist plus static validation commands.
 ## Author
 
 **Matthew Faber**  
-Matthew Faber builds hands-on cybersecurity portfolio projects that turn study material into recruiter-friendly demos.
+Matthew Faber builds hands-on cybersecurity portfolio projects.
 
 
