@@ -26,7 +26,7 @@ Each scenario includes at least 8 decision points, multiple good/bad paths, term
 
 ## Live demo
 
-https://matthewfaber.github.io/ir-playbook-trainer/
+https://mtfucf.github.io/ir-playbook-trainer/
 
 ## Run locally
 
